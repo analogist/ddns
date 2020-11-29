@@ -13,4 +13,5 @@ IPv6 = "https://ipv6bot.whatismyipaddress.com/" #A public API, forced to IPv6 th
 Name = "Your domain"
 IPv4 = true #Create A record
 IPv6 = true #Create AAAA record
+TTL = 60 #TTL in seconds for IPv4/IPv6 record(s)
 Replace = true #Replace existing entries

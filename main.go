@@ -35,6 +35,7 @@ type Domain struct {
 	Name    string
 	IPv4    bool
 	IPv6    bool
+	TTL     int
 	Replace bool
 }
 
@@ -88,12 +89,16 @@ func GetIPAddress(addrs QueryAddress) (ipv4, ipv6 net.IP, err error) {
 // UpdateDomains checks if DNS configuration is correct and updates it otherwise
 func UpdateDomains(configuration Config, client *ns1.Client, ipv4, ipv6 string) {
 	for _, domain := range configuration.Domains {
+		if domain.TTL <= 0 {
+			fmt.Printf("Record TTL for %s must be > 0 seconds\b", domain.Name)
+			return
+		}
 		if domain.IPv4 {
 			record, _, err := client.Records.Get(configuration.Basic.Zone, domain.Name, "A")
 			if err != nil {
 				if err == ns1.ErrRecordMissing {
 					newRecord := dns.NewRecord(configuration.Basic.Zone, domain.Name, "A")
-					newRecord.TTL = 60
+					newRecord.TTL = domain.TTL
 					newRecord.Type = "A"
 					newRecord.AddAnswer(dns.NewAv4Answer(ipv4))
 					_, err = client.Records.Create(newRecord)
@@ -103,10 +108,10 @@ func UpdateDomains(configuration Config, client *ns1.Client, ipv4, ipv6 string) 
 				} else {
 					fmt.Printf("Failed to get current DNS configuration for %s: %s\n", domain.Name, err.Error())
 				}
-			} else if record.TTL != 60 || len(record.Answers) != 1 || record.Answers[0].String() != ipv4 {
+			} else if record.TTL != domain.TTL || len(record.Answers) != 1 || record.Answers[0].String() != ipv4 {
 				record.Answers = nil
 				record.AddAnswer(dns.NewAv4Answer(ipv4))
-				record.TTL = 60
+				record.TTL = domain.TTL
 				_, err := client.Records.Update(record)
 				if err != nil {
 					fmt.Printf("Failed to update DNS record for %s: %s\n", domain.Name, err.Error())
@@ -118,7 +123,7 @@ func UpdateDomains(configuration Config, client *ns1.Client, ipv4, ipv6 string) 
 			if err != nil {
 				if err == ns1.ErrRecordMissing {
 					newRecord := dns.NewRecord(configuration.Basic.Zone, domain.Name, "AAAA")
-					newRecord.TTL = 60
+					newRecord.TTL = domain.TTL
 					newRecord.Type = "AAAA"
 					newRecord.AddAnswer(dns.NewAv6Answer(ipv6))
 					_, err = client.Records.Create(newRecord)
@@ -128,10 +133,10 @@ func UpdateDomains(configuration Config, client *ns1.Client, ipv4, ipv6 string) 
 				} else {
 					fmt.Printf("Failed to get current DNS configuration for %s: %s\n", domain.Name, err.Error())
 				}
-			} else if record.TTL != 60 || len(record.Answers) != 1 || record.Answers[0].String() != ipv6 {
+			} else if record.TTL != domain.TTL || len(record.Answers) != 1 || record.Answers[0].String() != ipv6 {
 				record.Answers = nil
 				record.AddAnswer(dns.NewAv6Answer(ipv6))
-				record.TTL = 60
+				record.TTL = domain.TTL
 				_, err := client.Records.Update(record)
 				if err != nil {
 					fmt.Printf("Failed to update DNS record for %s: %s\n", domain.Name, err.Error())
@@ -183,6 +188,7 @@ func main() {
 	domains := flag.String("d", "ddns.example.com,test.example.com", "The domain(s) to change, seperated by commas")
 	ipv4 := flag.String("4", "https://ipv4bot.whatismyipaddress.com/", "Domain to query for IPv4 (A) Record (leave empty to disable)")
 	ipv6 := flag.String("6", "https://ipv6bot.whatismyipaddress.com/", "Domain to query for IPv6 (AAAA) Record (leave empty to disable)")
+	ttl := flag.Int("t", 60, "The TTL (time-to-live) for the domain Record")
 	replace := flag.Bool("r", false, "Replace conflicting records (CNAME, A, AAAA")
 	simple := flag.Bool("s", false, "Enable simple mode (Use command-link arguments instead of configuration file)")
 	config := flag.String("c", "/etc/ns1-ddns/config.toml", "Path to the configuration file")
@@ -210,6 +216,7 @@ func main() {
 			d.Name = domain
 			d.IPv4 = (*ipv4 != "")
 			d.IPv6 = (*ipv6 != "")
+			d.TTL = *ttl
 			d.Replace = *replace
 			configuration.Domains = append(configuration.Domains, *d)
 		}
@@ -260,4 +267,3 @@ func main() {
 		runDDNS(configuration, client)
 	}
 }
-
